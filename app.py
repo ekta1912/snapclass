@@ -68,11 +68,12 @@ def main():
 
     join_code = st.query_params.get('join-code')
     if join_code:
+        clean_join_code = str(join_code).strip()
         if st.session_state.get('login_type') != 'student':
             st.session_state['login_type'] = 'student'
             st.rerun()
         if st.session_state.get('is_logged_in') and st.session_state.get('user_role') == 'student':
-            auto_enroll_dialog(join_code)
+            auto_enroll_dialog(clean_join_code)
 
 
 if __name__ == '__main__':
