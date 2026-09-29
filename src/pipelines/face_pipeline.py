@@ -42,29 +42,34 @@ def get_trained_model():
     X = []
     y = []
 
-
-    student_db = get_all_students()
+    try:
+        student_db = get_all_students()
+    except Exception:
+        return None
 
     if not student_db:
         return None
-    
+
     for student in student_db:
         embedding = student.get('face_embedding')
-        if embedding:
+        sid = student.get('student_id')
+        if embedding and sid is not None:
             X.append(np.array(embedding))
-            y.append(student.get('student_id'))
+            y.append(sid)
 
-    if len(X) ==0:
-        return 0
-    
+    if len(X) == 0:
+        return None
+
+    unique_classes = set(y)
     clf = SVC(kernel='linear', probability=True, class_weight='balanced')
 
-    try:
-        clf.fit(X, y)
-    except ValueError:
-        pass
+    if len(unique_classes) >= 2:
+        try:
+            clf.fit(X, y)
+        except ValueError:
+            pass
 
-    return {'clf': clf, 'X':X, "y":y}
+    return {'clf': clf, 'X': X, 'y': y}
 
 
 def train_classifier():
@@ -72,35 +77,44 @@ def train_classifier():
     model_data = get_trained_model()
     return bool(model_data)
 
+
 def predict_attendance(class_image_np):
-    encodings = get_face_embeddings(class_image_np)
+    try:
+        encodings = get_face_embeddings(class_image_np)
+    except Exception:
+        encodings = []
 
     detected_student = {}
 
-
     model_data = get_trained_model()
 
-    if not model_data:
+    if not model_data or not isinstance(model_data, dict):
         return detected_student, [], len(encodings)
-    
-    clf = model_data['clf']
-    X_train = model_data['X']
-    y_train = model_data['y']
+
+    clf = model_data.get('clf')
+    X_train = model_data.get('X', [])
+    y_train = model_data.get('y', [])
 
     all_students = sorted(list(set(y_train)))
+    if not all_students:
+        return detected_student, [], len(encodings)
 
     for encoding in encodings:
-        if len(all_students)>= 2:
-            predicted_id= int(clf.predict([encoding])[0])
+        if len(all_students) >= 2 and hasattr(clf, "classes_"):
+            try:
+                predicted_id = int(clf.predict([encoding])[0])
+            except Exception:
+                predicted_id = int(all_students[0])
         else:
             predicted_id = int(all_students[0])
 
-        student_embedding = X_train[y_train.index(predicted_id)]
+        if predicted_id in y_train:
+            student_embedding = X_train[y_train.index(predicted_id)]
+            best_match_score = np.linalg.norm(student_embedding - encoding)
 
-        best_match_score = np.linalg.norm(student_embedding - encoding)
+            resemblance_threshold = 0.6
 
-        resemblance_threshold = 0.6
+            if best_match_score <= resemblance_threshold:
+                detected_student[predicted_id] = True
 
-        if best_match_score <= resemblance_threshold:
-            detected_student[predicted_id] = True
     return detected_student, all_students, len(encodings)

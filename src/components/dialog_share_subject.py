@@ -6,8 +6,18 @@ import io
 
 @st.dialog("Share Class Link")
 def share_subject_dialog(subject_name, subject_code):
-    app_domain = "snapclass-main.streamlit.app"
-    join_url = f"{app_domain}/?join-code={subject_code}"
+    base_url = "https://snapclass.streamlit.app"
+    try:
+        if hasattr(st, "secrets") and "APP_URL" in st.secrets:
+            base_url = st.secrets["APP_URL"]
+    except Exception:
+        pass
+
+    base_url = base_url.rstrip("/")
+    if not base_url.startswith("http"):
+        base_url = f"https://{base_url}"
+
+    join_url = f"{base_url}/?join-code={subject_code}"
 
     st.header("Scan to Join")
 

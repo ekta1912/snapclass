@@ -60,30 +60,40 @@ def student_dashboard():
 
 
     cols = st.columns(2)
+    valid_subjects_count = 0
+
     for i, sub_node in enumerate(subjects):
-        sub = sub_node['subjects']
-        sid = sub['subject_id']
+        sub = sub_node.get('subjects')
+        if not sub:
+            continue
+        valid_subjects_count += 1
+        sid = sub.get('subject_id')
+        sub_name = sub.get('name', 'Course')
+        stats = stats_map.get(sid, {"total": 0, "attended": 0})
 
-
-        stats = stats_map.get(sid,{"total":0, "attended": 0} )
-        def unenroll_button():
-                if st.button("Unenroll from this course", key=f"unenroll_btn_{sid}", type='tertiary', width='stretch', icon=':material/delete_forever:'):
-                    unenroll_student_to_subject(student_id, sid)
-                    st.toast(f"Unenrolled from {sub['name']} successfully!")
+        def make_unenroll_callback(curr_sid=sid, curr_name=sub_name):
+            def unenroll_button():
+                if st.button("Unenroll from this course", key=f"unenroll_btn_{curr_sid}", type='tertiary', width='stretch', icon=':material/delete_forever:'):
+                    unenroll_student_to_subject(student_id, curr_sid)
+                    st.toast(f"Unenrolled from {curr_name} successfully!")
                     st.rerun()
+            return unenroll_button
 
         with cols[i % 2]:
-
             subject_card(
-                name = sub['name'],
-                code =sub['subject_code'],
-                section = sub['section'],
-                stats = [
+                name=sub.get('name', 'Untitled'),
+                code=sub.get('subject_code', 'N/A'),
+                section=sub.get('section', 'N/A'),
+                stats=[
                     ('📅', 'Total', stats['total']),
                     ('✅', 'Attended', stats['attended']),
                 ],
-                footer_callback=unenroll_button
+                footer_callback=make_unenroll_callback(sid, sub_name)
             )
+
+    if valid_subjects_count == 0:
+        st.info("You have not enrolled in any subjects yet. Use 'Enroll in Subject' above to join with a subject code.")
+
     footer_dashboard()
 
 

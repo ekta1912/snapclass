@@ -116,7 +116,10 @@ def teacher_tab_take_attendance():
         if st.button('Add Photos', type='primary', icon=':material/photo_prints:', width='stretch'):
             add_photos_dialog()
 
-    selected_subject_id = subject_options[selected_subject_label]
+    selected_subject_id = subject_options.get(selected_subject_label)
+    if not selected_subject_id:
+        st.error("Invalid subject selected")
+        return
 
     st.divider()
 
@@ -135,9 +138,7 @@ def teacher_tab_take_attendance():
             st.session_state.attendance_images = []
             st.rerun()
 
-
     with c2:
-        
         if st.button('Run Face Analysis', width='stretch', type='secondary', icon=':material/analytics:', disabled=not has_photos):
             with st.spinner('Deep scanning classroom photos...'):
                 all_detected_ids = {}
@@ -146,29 +147,26 @@ def teacher_tab_take_attendance():
                     img_np = np.array(img.convert('RGB'))
                     detected, _, _ = predict_attendance(img_np)
 
-
                     if detected:
                         for sid in detected.keys():
                             student_id = int(sid)
-
                             all_detected_ids.setdefault(student_id, []).append(f"Photo {idx+1}")
 
-                enrolled_res = supabase.table('subject_students').select("*, students(*)").eq('subject_id',selected_subject_id ).execute()
-                enrolled_students = enrolled_res.data
+                enrolled_res = supabase.table('subject_students').select("*, students(*)").eq('subject_id', selected_subject_id).execute()
+                enrolled_students = enrolled_res.data or []
 
                 if not enrolled_students:
                     st.warning('No students enrolled in this course')
                 else:
-
-                    results, attendance_to_log  = [], []
-
+                    results, attendance_to_log = [], []
                     current_timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-
                     for node in enrolled_students:
-                        student = node['students']
+                        student = node.get('students')
+                        if not student:
+                            continue
                         sources = all_detected_ids.get(int(student['student_id']), [])
-                        is_present= len(sources) > 0
+                        is_present = len(sources) > 0
 
                         results.append({
                             "Name": student['name'],
@@ -216,21 +214,26 @@ def teacher_tab_manage_subjects():
     if subjects:
         for sub in subjects:
             stats = [
-                ("🫂", "Students", sub['total_students']),
-                ("🕰️", "Classes", sub['total_classes']),
+                ("🫂", "Students", sub.get('total_students', 0)),
+                ("🕰️", "Classes", sub.get('total_classes', 0)),
             ]
-        def share_btn():
-            if st.button(f"Share Code: {sub['name']}", key=f"share_{sub['subject_code']}", icon=":material/share:"):
-                share_subject_dialog(sub['name'], sub['subject_code'])
-            st.space()
+            sub_name = sub.get('name', '')
+            sub_code = sub.get('subject_code', '')
 
-        subject_card(
-            name = sub['name'],
-            code = sub['subject_code'],
-            section = sub['section'],
-            stats=stats,
-            footer_callback=share_btn
-        )
+            def make_share_callback(name=sub_name, code=sub_code):
+                def share_btn():
+                    if st.button(f"Share Code: {name}", key=f"share_{code}", icon=":material/share:"):
+                        share_subject_dialog(name, code)
+                    st.space()
+                return share_btn
+
+            subject_card(
+                name=sub.get('name', 'Untitled Subject'),
+                code=sub.get('subject_code', 'N/A'),
+                section=sub.get('section', 'N/A'),
+                stats=stats,
+                footer_callback=make_share_callback(sub_name, sub_code)
+            )
     else:
         st.info("NO SUBJECTS FOUND. CREATE ONE ABOVE")
 
@@ -243,44 +246,54 @@ def teacher_tab_attendance_records():
     records = get_attendance_for_teacher(teacher_id)
 
     if not records:
+        st.info("No attendance records found yet.")
         return
-    
+
     data = []
 
     for r in records:
         ts = r.get('timestamp')
+        sub_info = r.get('subjects') or {}
+
+        formatted_time = "N/A"
+        if ts:
+            try:
+                formatted_time = datetime.fromisoformat(ts).strftime("%Y-%m-%d %I:%M %p")
+            except Exception:
+                formatted_time = str(ts)
 
         data.append({
             "ts_group": ts.split(".")[0] if ts else None,
-            "Time": datetime.fromisoformat(ts).strftime("%Y-%m-%d %I:%M %p") if ts else "N'A",
-            "Subject": r['subjects']['name'],
-            "Subject Code":r['subjects']['subject_code'],
+            "Time": formatted_time,
+            "Subject": sub_info.get('name', 'Unknown'),
+            "Subject Code": sub_info.get('subject_code', 'N/A'),
             "is_present": bool(r.get('is_present', False))
         })
 
-
     df = pd.DataFrame(data)
 
-
+    if df.empty:
+        st.info("No attendance records to display.")
+        return
 
     summary = (
         df.groupby(['ts_group', 'Time', 'Subject', 'Subject Code'])
         .agg(
-            Present_Count = ('is_present', 'sum'),
-            Total_Count =('is_present', 'count')
+            Present_Count=('is_present', 'sum'),
+            Total_Count=('is_present', 'count')
         ).reset_index()
-
     )
 
     summary['Attendance Stats'] = (
-        "✅ " + summary['Present_Count'].astype(str) + " /"
+        "✅ " + summary['Present_Count'].astype(str) + " / "
         + summary['Total_Count'].astype(str) + ' Students'
     )
 
-    display_df = ( summary.sort_values(by='ts_group' ,ascending=False)
-                  [['Time', 'Subject', 'Subject Code', 'Attendance Stats']]
-                  )
-    
+    display_df = (
+        summary.sort_values(by='ts_group', ascending=False)
+        [['Time', 'Subject', 'Subject Code', 'Attendance Stats']]
+    )
+
     st.dataframe(display_df, width='stretch', hide_index=True)
 
 

@@ -1,8 +1,19 @@
+# Environment variables & secrets
 .env
-.vscode
-*.pyc
-.DS_Store
-__pycache__/
+.streamlit/secrets.toml
+
+# Python virtual environments
 venv/
-.streamlit/
+.venv/
+env/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+*.pyc
+__pycache__/
 dist/
+build/
+*.egg-info/
+.pytest_cache/
