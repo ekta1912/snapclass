@@ -6,7 +6,7 @@ import io
 
 @st.dialog("Share Class Link")
 def share_subject_dialog(subject_name, subject_code):
-    base_url = "https://snapclass.streamlit.app"
+    base_url = "https://snapclass-pgvcdcd8twu49bgpgz2xgx.streamlit.app"
     try:
         if hasattr(st, "secrets") and "APP_URL" in st.secrets:
             base_url = st.secrets["APP_URL"]
